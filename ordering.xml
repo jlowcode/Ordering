@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<extension group="fabrik_element" method="upgrade" type="plugin" version="4">
+	<name>PLG_FABRIK_ELEMENT_ORDERING</name>
+	<author>Jlowcode Organization</author>
+	<creationDate>March 2024</creationDate>
+	<copyright>Copyright (C) 2024 Jlowcode Org - All rights reserved.</copyright>
+	<license>GNU/GPL http://www.gnu.org/copyleft/gpl.html</license>
+	<authorEmail>contact@jlowcode.org</authorEmail>
+	<authorUrl>www.jlowcode.org</authorUrl>
+	<version>4.0</version>
+	<description>PLG_FABRIK_ELEMENT_ORDERING_DESCRIPTION</description>
+
+	<files>
+		<filename plugin="ordering">ordering.php</filename>
+		<filename>ordering.js</filename>
+		<filename>nested-set-model.php</filename>
+		<filename>ordering-min.js</filename>
+		<filename>index.html</filename>
+		<folder>dist</folder>
+		<folder>forms</folder>
+		<folder>language</folder>
+		<folder>layouts</folder>
+	</files>
+
+</extension>

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<form>
+	<fields addfieldpath="/administrator/components/com_fabrik/models/fields" name="params">
+		<fieldset label="COM_FABRIK_OPTIONS" name="plg-element-ordering">
+
+			<field type="helplink" url="PLG_FABRIK_ELEMENT_ORDERING_HELP_SERVER"/>
+
+			<field name="ref_tree"
+				type="listfields"
+				description="PLG_ELEMENT_ORDERING_REF_TREE_DESC"
+				label="PLG_ELEMENT_ORDERING_REF_TREE_LABEL"/>
+
+		</fieldset>
+
+		<fieldset label="COM_FABRIK_ADVANCED" name="plg-element-ordering-advanced">
+
+		</fieldset>
+
+	</fields>
+</form>
