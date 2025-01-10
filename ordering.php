@@ -340,14 +340,47 @@ class PlgFabrik_ElementOrdering extends PlgFabrik_ElementList
 			foreach ($data as $val) {
 				$query = $db->getQuery(true);
 				$query->update($db->qn($table));
-				$query->set($db->qn($columnName.'_prt') . ' = ' . $x++);
+				$query->set($db->qn($columnName.'_pos') . ' = ' . $db->q('1'));
+				$query->set($db->qn($columnName.'_prt') . ' = ' . $db->q($x++));
 				$query->where($db->qn($joinKey) . ' = ' . $val['id']);
 				$db->setQuery($query);
 				$db->execute();
+
+				$y = 2;
+				$this->setPositionToChildren($table, $columnName, $joinKey, $y++, $val['children']);
 			}
 		}
 	}
 
+	/**
+	 * This method set position column to children nodes
+	 * 
+	 * @param		String			$table				Table to update
+	 * @param		String			$column				Columns to set
+	 * @param		String			$joinKey			Primary key
+	 * @param		Int				$pos				Position to update
+	 * @param		Array			$val				Row data
+	 * 
+	 * @return		Null
+	 */
+	private function setPositionToChildren($table, $column, $joinKey, $pos, $val)
+	{
+		$db = Factory::getContainer()->get('DatabaseDriver');
+
+		if(!empty($val)) {
+			foreach ($val as $v) {
+				$query = $db->getQuery(true);
+				$query->update($db->qn($table));
+				$query->set($db->qn($column.'_pos') . ' = ' . $pos++);
+				$query->where($db->qn($joinKey) . ' = ' . $v['id']);
+				$db->setQuery($query);
+				$db->execute();
+
+				$this->setPositionToChildren($table, $column, $joinKey, $pos, $v['children']);
+			}
+
+		}		
+	}
 
 	/**
 	 * This method verify if the column exists and if not create it in database
@@ -483,6 +516,13 @@ class PlgFabrik_ElementOrdering extends PlgFabrik_ElementList
 			} else {
 				$pos = $db->q($this->nested->getNewPosition($valueTree));
 			}
+
+			$query = $db->getQuery(true);
+			$query->update($db->qn($table));
+			$query->set($db->qn($fullColumnName) . ' = ' . $pos);
+			$query->where($db->qn($joinKey) . ' = ' . $data['rowid']);
+			$db->setQuery($query);
+			$db->execute();
 		} else {
 			$fullColumnName = $columnName.'_prt';
 
@@ -503,14 +543,21 @@ class PlgFabrik_ElementOrdering extends PlgFabrik_ElementList
 			} else {
 				$pos = $db->q($this->nested->getNewPosition($value));
 			}
-		}
 
-		$query = $db->getQuery(true);
-		$query->update($db->qn($table));
-		$query->set($db->qn($fullColumnName) . ' = ' . $pos);
-		$query->where($db->qn($joinKey) . ' = ' . $data['rowid']);
-		$db->setQuery($query);
-		$db->execute();
+			$query = $db->getQuery(true);
+			$query->update($db->qn($table));
+			$query->set($db->qn($fullColumnName) . ' = ' . $fullColumnName . ' + 1');
+			$query->where($db->qn($fullColumnName) . ' >= ' . $db->q($pos));
+			$db->setQuery($query);
+			$db->execute();
+
+			$query = $db->getQuery(true);
+			$query->update($db->qn($table));
+			$query->set($db->qn($fullColumnName) . ' = ' . $pos);
+			$query->where($db->qn($joinKey) . ' = ' . $data['rowid']);
+			$db->setQuery($query);
+			$db->execute();
+		}
 
 		$this->nested->rebuild();
 

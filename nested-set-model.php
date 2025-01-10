@@ -516,7 +516,7 @@ class NestedSet
         if (isset($where['whereString']) && is_string($where['whereString'])) {
             $sql .= ' WHERE ' . $where['whereString'];
         }
-        $sql .= ' ORDER BY `' . $this->positionParentColumnName . '` ASC, `' . $this->positionColumnName . '` ASC, `' . $this->leftColumnName . '` ASC';
+        $sql .= ' ORDER BY `' . $this->positionParentColumnName . '` ASC, `' . $this->positionColumnName . '` ASC, `' . $this->leftColumnName . '` IS NOT NULL, `' . $this->leftColumnName . '` DESC';
         $Sth = $this->PDO->prepare($sql);
 
         if (isset($where['whereValues']) && is_array($where['whereValues'])) {
