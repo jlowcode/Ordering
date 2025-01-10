@@ -308,6 +308,12 @@ class PlgFabrik_ElementOrdering extends PlgFabrik_ElementList
 
 		$elements = $listModel->getElements('id');
 		$refTreeId = $params->get('ref_tree');
+
+		if(empty($refTreeId)) {
+			$this->app->enqueueMessage(Text::_('PLG_FABRIK_ELEMENT_ORDERING_WARNING_SAVE'), 'warning');
+			return;
+		}
+
 		$refTree = $elements[$refTreeId];
 		$paramsTree = $refTree->getParams();
 		$joinKey = $paramsTree->get('join_key_column');
