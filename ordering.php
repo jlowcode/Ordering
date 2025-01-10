@@ -363,7 +363,7 @@ class PlgFabrik_ElementOrdering extends PlgFabrik_ElementList
 	 * 
 	 * @return		Null
 	 */
-	private function setPositionToChildren($table, $column, $joinKey, $pos, $val)
+	private function setPositionToChildren($table, $column, $joinKey, &$pos, $val)
 	{
 		$db = Factory::getContainer()->get('DatabaseDriver');
 
