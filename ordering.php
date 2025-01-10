@@ -347,7 +347,7 @@ class PlgFabrik_ElementOrdering extends PlgFabrik_ElementList
 				$db->execute();
 
 				$y = 2;
-				$this->setPositionToChildren($table, $columnName, $joinKey, $y++, $val['children']);
+				$this->setPositionToChildren($table, $columnName, $joinKey, $y, $val['children']);
 			}
 		}
 	}
