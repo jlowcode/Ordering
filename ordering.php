@@ -91,6 +91,7 @@ class PlgFabrik_ElementOrdering extends PlgFabrik_ElementList
 		$this->nested->rightColumnName = $this->getElement()->name . '_rgt';
 		$this->nested->levelColumnName = $this->getElement()->name . '_lvl';
 		$this->nested->positionColumnName = $this->getElement()->name . '_pos';
+		$this->nested->positionParentColumnName = $this->getElement()->name . '_prt';
 		$this->nested->tableName = $listModel->getTable()->db_table_name;
 	}
 
@@ -215,7 +216,7 @@ class PlgFabrik_ElementOrdering extends PlgFabrik_ElementList
 		$input = $app->input;
 		$r = new stdClass;
 
-        $node = $input->getInt('value');
+        $node = $input->getString('value');
         $listId = $input->getInt('listId');
         $refTreeId = $input->getInt('refTreeId');
         $htmlName = explode('___', $input->getString('htmlName'))[1];
@@ -238,10 +239,10 @@ class PlgFabrik_ElementOrdering extends PlgFabrik_ElementList
 	/**
 	 * This method get from database the children nodes
 	 * 
-	 * @param		Int			$id				Parent node to search
-	 * @param		Int			$listId			List id to get params
-	 * @param		Int			$refTreeId		Element id to reference tree
-	 * @param		String		$order			Column to order results
+	 * @param		String			$id				Parent node to search
+	 * @param		Int				$listId			List id to get params
+	 * @param		Int				$refTreeId		Element id to reference tree
+	 * @param		String			$order			Column to order results
 	 * 
 	 * @return		Array
 	 */
@@ -264,8 +265,8 @@ class PlgFabrik_ElementOrdering extends PlgFabrik_ElementList
 		$query = $db->getQuery(true);
 		$query->select($db->qn([$joinKey, $joinVal]))
 			->from($db->qn($table))
-			->where($db->qn($joinParent) . ' = ' . $db->q($id))
 			->order($db->qn($order));
+		$id == '' ? $query->where($db->qn($joinParent) . ' IS NULL') : $query->where($db->qn($joinParent) . ' = ' . $db->q($id));
 		$db->setQuery($query);
 		$children = $db->loadRowList();
 
@@ -298,13 +299,49 @@ class PlgFabrik_ElementOrdering extends PlgFabrik_ElementList
 	 */
 	public function beforeSave(&$row) 
 	{
+		$db = Factory::getContainer()->get('DatabaseDriver');
+
 		$listModel = $this->getListModel();
+		$params = $this->getParams();
 		$table = $listModel->getTable()->get('db_table_name');
+		$columnName = $this->getElement()->name;
+
+		$elements = $listModel->getElements('id');
+		$refTreeId = $params->get('ref_tree');
+		$refTree = $elements[$refTreeId];
+		$paramsTree = $refTree->getParams();
+		$joinKey = $paramsTree->get('join_key_column');
+
+		if(!$listModel->canShowTutorialTemplate()) {
+			$this->app->enqueueMessage(Text::_('PLG_FABRIK_ELEMENT_ORDERING_ERROR_SAVE'), 'notice');
+		}
 
 		$this->saveNewColumn($row, $table, '_lvl');
 		$this->saveNewColumn($row, $table, '_rgt');
 		$this->saveNewColumn($row, $table, '_pos');
+		$this->saveNewColumn($row, $table, '_prt');
+
+		$query = $db->getQuery(true);
+		$query->select('COUNT(*)')->from($db->qn($table));
+		$db->setQuery($query);
+		$rows = $db->loadResult();
+		if($rows) {
+			$this->setNestedConfig();
+			$this->nested->rebuild();
+
+			$data = $listModel->dataTemplateTutorial();
+			$x = 1;
+			foreach ($data as $val) {
+				$query = $db->getQuery(true);
+				$query->update($db->qn($table));
+				$query->set($db->qn($columnName.'_prt') . ' = ' . $x++);
+				$query->where($db->qn($joinKey) . ' = ' . $val['id']);
+				$db->setQuery($query);
+				$db->execute();
+			}
+		}
 	}
+
 
 	/**
 	 * This method verify if the column exists and if not create it in database
@@ -412,7 +449,6 @@ class PlgFabrik_ElementOrdering extends PlgFabrik_ElementList
 		$params = $this->getParams();
 		$elementName = $this->getHTMLid();
 		$columnName = $this->getElement()->name;
-		$columns = [$columnName, $columnName.'_pos', $columnName.'_lvl', $columnName.'_rgt'];
 
 		$data = $formModel->formDataWithTableName;
 		$value = (int) $data[$elementName.'_orig'][0];
@@ -426,22 +462,46 @@ class PlgFabrik_ElementOrdering extends PlgFabrik_ElementList
 		$nameTree = $refTree->getHTMLid();
 		$valueTree = (int) $data[$nameTree][0];
 
-		if($value == -1) {
-			$pos = 1;
-		} elseif ($value) {
-			$query = $db->getQuery(true);
-			$query->select($db->qn($columnName.'_pos'))
-				->from($db->qn($table))
-				->where($db->qn($joinKey) . ' = ' . $db->q($value));
-			$db->setQuery($query);
-			$pos = (int) $db->loadResult()+1;
+		if(!empty($data[$nameTree][0])) {
+			$fullColumnName = $columnName.'_pos';
+
+			if($value == -1) {
+				$pos = 1;
+			} elseif ($value) {
+				$query = $db->getQuery(true);
+				$query->select($db->qn($fullColumnName))
+					->from($db->qn($table))
+					->where($db->qn($joinKey) . ' = ' . $db->q($value));
+				$db->setQuery($query);
+				$pos = (int) $db->loadResult()+1;
+			} else {
+				$pos = $db->q($this->nested->getNewPosition($valueTree));
+			}
 		} else {
-			$pos = $db->q($this->nested->getNewPosition($valueTree));
+			$fullColumnName = $columnName.'_prt';
+
+			if($value == -1) {
+				$query = $db->getQuery(true);
+				$query->select($db->qn($fullColumnName))
+					->from($db->qn($table))
+					->order($db->qn($fullColumnName) . ' ASC LIMIT 1');
+				$db->setQuery($query);
+				$pos = (int) $db->loadResult()+1;
+			} elseif ($value) {
+				$query = $db->getQuery(true);
+				$query->select($db->qn($fullColumnName))
+					->from($db->qn($table))
+					->where($db->qn($joinKey) . ' = ' . $db->q($value));
+				$db->setQuery($query);
+				$pos = (int) $db->loadResult()+1;
+			} else {
+				$pos = $db->q($this->nested->getNewPosition($value));
+			}
 		}
 
 		$query = $db->getQuery(true);
 		$query->update($db->qn($table));
-		$query->set($db->qn($columnName.'_pos') . ' = ' . $pos);
+		$query->set($db->qn($fullColumnName) . ' = ' . $pos);
 		$query->where($db->qn($joinKey) . ' = ' . $data['rowid']);
 		$db->setQuery($query);
 		$db->execute();

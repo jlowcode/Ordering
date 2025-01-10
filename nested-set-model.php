@@ -50,6 +50,11 @@ class NestedSet
     public $positionColumnName = 'position';
 
     /**
+     * @var string Position column name in the table to root nodes.
+     */
+    public $positionParentColumnName = 'position_parent';
+
+    /**
      * @var string Table name.
      */
     public $tableName = 'taxonomy';
@@ -511,7 +516,7 @@ class NestedSet
         if (isset($where['whereString']) && is_string($where['whereString'])) {
             $sql .= ' WHERE ' . $where['whereString'];
         }
-        $sql .= ' ORDER BY `' . $this->positionColumnName . '` ASC';
+        $sql .= ' ORDER BY `' . $this->positionParentColumnName . '` ASC, `' . $this->positionColumnName . '` ASC, `' . $this->leftColumnName . '` ASC';
         $Sth = $this->PDO->prepare($sql);
 
         if (isset($where['whereValues']) && is_array($where['whereValues'])) {

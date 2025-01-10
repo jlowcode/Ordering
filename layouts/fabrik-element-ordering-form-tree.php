@@ -17,6 +17,3 @@ $labelDefault = $d->data[$d->id];
         </div>
     </div>
 </div>
-
-
-
