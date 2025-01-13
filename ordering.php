@@ -73,12 +73,16 @@ class PlgFabrik_ElementOrdering extends PlgFabrik_ElementList
 	/**
 	 * This method get set configuration to use nested set model to order
 	 * 
+	 * @param		Object		$listModel			List Model
+	 * @param		String		$elName				Element name
+	 * 
 	 * @return		Null;
 	 */
-	private function setNestedConfig()
+	private function setNestedConfig($listModel=null, $elName=null)
 	{
 		$params = $this->getParams();
-		$listModel = $this->getListModel();
+		$listModel = isset($listModel) ? $listModel : $this->getListModel();
+		$elName = isset($elName) ? $elName : $this->getElement()->name;
 
 		$elements = $listModel->getElements('id');
         $refTree = $elements[$params->get('ref_tree')];
@@ -87,11 +91,11 @@ class PlgFabrik_ElementOrdering extends PlgFabrik_ElementList
 
 		$this->nested->idColumnName = $listModel->getPrimaryKeyAndExtra()[0]['colname'];
 		$this->nested->parentIdColumnName = $joinTree->table_key;
-		$this->nested->leftColumnName = $this->getElement()->name;
-		$this->nested->rightColumnName = $this->getElement()->name . '_rgt';
-		$this->nested->levelColumnName = $this->getElement()->name . '_lvl';
-		$this->nested->positionColumnName = $this->getElement()->name . '_pos';
-		$this->nested->positionParentColumnName = $this->getElement()->name . '_prt';
+		$this->nested->leftColumnName = $elName;
+		$this->nested->rightColumnName = $elName . '_rgt';
+		$this->nested->levelColumnName = $elName . '_lvl';
+		$this->nested->positionColumnName = $elName . '_pos';
+		$this->nested->positionParentColumnName = $elName . '_prt';
 		$this->nested->tableName = $listModel->getTable()->db_table_name;
 	}
 
@@ -479,9 +483,6 @@ class PlgFabrik_ElementOrdering extends PlgFabrik_ElementList
 	 */
 	public function onAfterProcess()
 	{
-		$db = Factory::getContainer()->get('DatabaseDriver');
-		$this->setNestedConfig();
-
 		$listModel = $this->getListModel();
 		$formModel = $this->getFormModel();
 		$element = $this->getElement();
@@ -491,70 +492,152 @@ class PlgFabrik_ElementOrdering extends PlgFabrik_ElementList
 
 		$data = $formModel->formDataWithTableName;
 		$value = (int) $data[$elementName.'_orig'][0];
-		$table = $listModel->getTable()->get('db_table_name');
 
 		$elements = $listModel->getElements('id');
 		$refTreeId = $params->get('ref_tree');
 		$refTree = $elements[$refTreeId];
+		$nameTree = $refTree->getHTMLid();
+		$valueTree = $data[$nameTree][0];
+
+		$this->makeOrdering($valueTree, $value, $columnName, $listModel, $refTree, $data['rowid']);
+
+		return true;
+	}
+
+	/**
+	 * This method redirect to makeOrdering function to ordering from draggable tree
+	 * 
+	 * @return		Null
+	 */
+	public function onMakeOrdering()
+	{
+		$listModel = JModelLegacy::getInstance('List', 'FabrikFEModel');
+        $app = Factory::getApplication();
+
+		$input = $app->input;
+		$r = new stdClass;
+
+        $refId = $input->getString('value');
+        $refParentId = $input->getString('refParentId');
+        $listId = $input->getInt('listId');
+        $rowId = $input->getInt('rowId');
+
+		$listModel->setId($listId);
+
+		if(!$listModel->canShowTutorialTemplate()) {
+			$this->app->enqueueMessage(Text::_('PLG_FABRIK_ELEMENT_ORDERING_ERROR_SAVE'), 'notice');
+		}
+
+		$elements = $listModel->getElements('id');
+		$fields = $listModel->fieldsTemplateTutorial;
+		$elTree = $elements[$fields->tree];
+		$elOrder = $elements[$fields->ordering];
+		$columnName = $elOrder->getElement()->name;
+
+		$this->setParams($elOrder->getParams(), 0);
+
+		try {
+			$r->success = $this->makeOrdering($refParentId, $refId, $columnName, $listModel, $elTree, $rowId);
+		} catch (\Throwable $th) {
+			$r->msg = $th->getMessage();
+			$r->success = false;
+		}
+
+		echo json_encode($r);
+	}
+
+	/**
+	 * This method make the ordering to form view and to list view when tree is draggable
+	 * 
+	 * @param		String			$refParentId			Parent id 
+	 * @param		Ints			$refId				Node id
+	 * @param		String			$columnName			Name of the column used by this plugin
+	 * @param		Object			$listModel			List model
+	 * @param		Object			$refTree			Model of the reference tree
+	 * @param		String			$rowId				Current record id
+	 * 
+	 * @return		Bool
+	 */
+	private function makeOrdering($refParentId, $refId, $columnName, $listModel, $refTree, $rowId='')
+	{
+		$db = Factory::getContainer()->get('DatabaseDriver');
+		$this->setNestedConfig($listModel, $columnName);
+		$addPos = false;
+
+		$table = $listModel->getTable()->get('db_table_name');
 		$paramsTree = $refTree->getParams();
 		$joinKey = $paramsTree->get('join_key_column');
-		$nameTree = $refTree->getHTMLid();
-		$valueTree = (int) $data[$nameTree][0];
+		$joinParent = $paramsTree->get('tree_parent_id');
 
-		if(!empty($data[$nameTree][0])) {
+		if(!empty($refParentId)) {
 			$fullColumnName = $columnName.'_pos';
 
-			if($value == -1) {
+			if($refId == -1) {
 				$pos = 1;
-			} elseif ($value) {
+				$addPos = true;
+			} elseif ($refId) {
 				$query = $db->getQuery(true);
 				$query->select($db->qn($fullColumnName))
 					->from($db->qn($table))
-					->where($db->qn($joinKey) . ' = ' . $db->q($value));
+					->where($db->qn($joinKey) . ' = ' . $db->q($refId));
 				$db->setQuery($query);
 				$pos = (int) $db->loadResult()+1;
+				$addPos = true;
 			} else {
-				$pos = $db->q($this->nested->getNewPosition($valueTree));
+				$pos = $db->q($this->nested->getNewPosition((int) $refParentId));
+			}
+
+			if($addPos) {
+				$query = $db->getQuery(true);
+				$query->update($db->qn($table))
+					->set($db->qn($fullColumnName) . ' = ' . $fullColumnName . ' + 1')
+					->where($db->qn($fullColumnName) . ' >= ' . $db->q($pos));
+				$db->setQuery($query);
+				$db->execute();
 			}
 
 			$query = $db->getQuery(true);
-			$query->update($db->qn($table));
-			$query->set($db->qn($fullColumnName) . ' = ' . $pos);
-			$query->where($db->qn($joinKey) . ' = ' . $data['rowid']);
+			$query->update($db->qn($table))
+				->set($db->qn($fullColumnName) . ' = ' . $pos)
+				->where($db->qn($joinKey) . ' = ' . $rowId);
 			$db->setQuery($query);
 			$db->execute();
 		} else {
 			$fullColumnName = $columnName.'_prt';
 
-			if($value == -1) {
+			if($refId == -1) {
 				$query = $db->getQuery(true);
 				$query->select($db->qn($fullColumnName))
 					->from($db->qn($table))
 					->order($db->qn($fullColumnName) . ' ASC LIMIT 1');
 				$db->setQuery($query);
 				$pos = (int) $db->loadResult()+1;
-			} elseif ($value) {
+				$addPos = true;
+			} elseif ($refId) {
 				$query = $db->getQuery(true);
 				$query->select($db->qn($fullColumnName))
 					->from($db->qn($table))
-					->where($db->qn($joinKey) . ' = ' . $db->q($value));
+					->where($db->qn($joinKey) . ' = ' . $db->q($refId));
 				$db->setQuery($query);
 				$pos = (int) $db->loadResult()+1;
+				$addPos = true;
 			} else {
-				$pos = $db->q($this->nested->getNewPosition($value));
+				$pos = $db->q($this->nested->getNewPosition($refId));
+			}
+
+			if($addPos) {
+				$query = $db->getQuery(true);
+				$query->update($db->qn($table))
+					->set($db->qn($fullColumnName) . ' = ' . $fullColumnName . ' + 1')
+					->where($db->qn($fullColumnName) . ' >= ' . $db->q($pos));
+				$db->setQuery($query);
+				$db->execute();
 			}
 
 			$query = $db->getQuery(true);
-			$query->update($db->qn($table));
-			$query->set($db->qn($fullColumnName) . ' = ' . $fullColumnName . ' + 1');
-			$query->where($db->qn($fullColumnName) . ' >= ' . $db->q($pos));
-			$db->setQuery($query);
-			$db->execute();
-
-			$query = $db->getQuery(true);
-			$query->update($db->qn($table));
-			$query->set($db->qn($fullColumnName) . ' = ' . $pos);
-			$query->where($db->qn($joinKey) . ' = ' . $data['rowid']);
+			$query->update($db->qn($table))
+				->set($db->qn($fullColumnName) . ' = ' . $pos)
+				->where($db->qn($joinKey) . ' = ' . $rowId);
 			$db->setQuery($query);
 			$db->execute();
 		}

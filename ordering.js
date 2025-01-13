@@ -102,7 +102,6 @@ define(['jquery', 'fab/element', 'fab/encoder', 'fab/fabrik'], function (jQuery,
             var ref = jQuery('#'+refTree);
 
             ref.on('click', function() {
-                var tree = jQuery('#'+refTree).find('.jqtree_common.jqtree-tree').parent();
                 value = jQuery(this).find('input[name="' + refTree + '[]"]').val();
                 self.buildTree(value);
             });
