@@ -114,6 +114,10 @@ class PlgFabrik_ElementOrdering extends PlgFabrik_ElementList
 		$listModel = $this->getListModel();
 		$id = $this->getFullName();
 
+		if(empty($params->get('ref_tree'))) {
+			return '';
+		}
+
         $elements = $listModel->getElements('id');
         $refTree = $elements[$params->get('ref_tree')];
 		$nameRefTree = $refTree->getFullName();
@@ -173,6 +177,11 @@ class PlgFabrik_ElementOrdering extends PlgFabrik_ElementList
 		$id = $this->getHTMLId($repeatCounter);
         $params = $this->getParams();
         $listModel = $this->getListModel();
+
+		if(empty($params->get('ref_tree'))) {
+			return '';
+		}
+
         $elements = $listModel->getElements('id');
         $refTree = $elements[$params->get('ref_tree')];
         $elParams = $refTree->getParams();
