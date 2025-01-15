@@ -611,7 +611,7 @@ class PlgFabrik_ElementOrdering extends PlgFabrik_ElementList
 					->from($db->qn($table))
 					->order($db->qn($fullColumnName) . ' ASC LIMIT 1');
 				$db->setQuery($query);
-				$pos = (int) $db->loadResult()+1;
+				$pos = (int) $db->loadResult();
 				$addPos = true;
 			} elseif ($refId) {
 				$query = $db->getQuery(true);
