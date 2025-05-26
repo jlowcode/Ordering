@@ -456,6 +456,8 @@ class PlgFabrik_ElementOrdering extends PlgFabrik_ElementList
 	{
 		$db = Factory::getContainer()->get('DatabaseDriver');
 
+		if($input->getBool('metadata_extract')) return true;
+
 		$listModel = $this->getListModel();
 		$formModel = $this->getFormModel();
 		$params = $this->getParams();
