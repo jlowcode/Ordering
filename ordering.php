@@ -412,9 +412,9 @@ class PlgFabrik_ElementOrdering extends PlgFabrik_ElementList
 		$value = $db->loadResult();
 
 		$orig = $formModel->formData[$elementName][0];
-		$formModel->formData[$elementName][0] = empty($orig) ? '0' : $value;
-		$formModel->formData[$elementName.'_raw'][0] = empty($orig) ? '0' : $value;
-		$formModel->formData[$elementName.'_orig'][0] = empty($orig) ? '0' : $orig;
+		$formModel->formData[$elementName][0] = empty($orig) ? '-1' : $value;
+		$formModel->formData[$elementName.'_raw'][0] = empty($orig) ? '-1' : $value;
+		$formModel->formData[$elementName.'_orig'][0] = empty($orig) ? '-1' : $orig;
 
 		return true;
 	}
