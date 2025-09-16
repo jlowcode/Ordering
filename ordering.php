@@ -190,6 +190,7 @@ class PlgFabrik_ElementOrdering extends PlgFabrik_ElementList
         $opts->listId = $listModel->getId();
         $opts->refTree = strpos($refTree->getName(), 'Databasejoin') > -1 && $elParams->get('database_join_display_type') == 'auto-complete' && $elParams->get('database_join_display_style') == 'only-treeview' ? $refTree->getHTMLid() : false;
 		$opts->refTreeId = $params->get('ref_tree');
+		$opts->filterElementId = $params->get('filter_element');
 		$opts->defaultTree = $this->defaultTree;
 		$opts->elName = $this->getHTMLid().'[]';
  
@@ -224,7 +225,6 @@ class PlgFabrik_ElementOrdering extends PlgFabrik_ElementList
     public function onGetTree() 
     {
         $listModel = Factory::getApplication()->bootComponent('com_fabrik')->getMVCFactory()->createModel('List', 'FabrikFEModel');
-
         $app = Factory::getApplication();
 
 		$input = $app->input;
@@ -233,13 +233,14 @@ class PlgFabrik_ElementOrdering extends PlgFabrik_ElementList
         $node = $input->getString('value');
         $listId = $input->getInt('listId');
         $refTreeId = $input->getInt('refTreeId');
+		$filterElementId = $input->getInt('filterElementId');
         $htmlName = explode('___', $input->getString('htmlName'))[1];
 
 		$listModel->setId($listId);
 		$table = $listModel->getFormModel()->getTableName();
 
 		try {
-			$r->data = $this->getChildrenNodes($node, $listId, $refTreeId, $htmlName);
+			$r->data = $this->getChildrenNodes($node, $listId, $refTreeId, $htmlName, $filterElementId);
 			$r->htmlName = $table . '___' . $htmlName;
 			$r->success = true;
 		} catch (\Throwable $th) {
@@ -253,24 +254,27 @@ class PlgFabrik_ElementOrdering extends PlgFabrik_ElementList
 	/**
 	 * This method get from database the children nodes
 	 * 
-	 * @param		String			$id				Parent node to search
-	 * @param		Int				$listId			List id to get params
-	 * @param		Int				$refTreeId		Element id to reference tree
-	 * @param		String			$order			Column to order results
+	 * @param		String			$id						Parent node to search
+	 * @param		Int				$listId					List id to get params
+	 * @param		Int				$refTreeId				Element id to reference tree
+	 * @param		String			$order					Column to order results
+	 * @param		INT				$filterElementId		Element id to use as a filter
 	 * 
 	 * @return		Array
 	 */
-	private function getChildrenNodes($id, $listId, $refTreeId, $order)
+	private function getChildrenNodes($id, $listId, $refTreeId, $order, $filterElementId)
 	{
         $listModel = Factory::getApplication()->bootComponent('com_fabrik')->getMVCFactory()->createModel('List', 'FabrikFEModel');
-
 		$db = Factory::getContainer()->get('DatabaseDriver');
+
 		$first = Array(-1, Text::_("PLG_FABRIK_ELEMENT_ORDERING_FIRST"));
+		$params = $this->getParams();
 
 		$listModel->setId($listId);
 		$table = $listModel->getFormModel()->getTableName();
 		$elements = $listModel->getElements('id');
 		$refTree = $elements[$refTreeId];
+		$filterElement = $elements[$filterElementId];
 		$paramsTree = $refTree->getParams();
 
 		$joinKey = $paramsTree->get('join_key_column');
@@ -281,7 +285,14 @@ class PlgFabrik_ElementOrdering extends PlgFabrik_ElementList
 		$query->select($db->qn([$joinKey, $joinVal]))
 			->from($db->qn($table))
 			->order($db->qn($order));
-		$id == '' ? $query->where($db->qn($joinParent) . ' IS NULL') : $query->where($db->qn($joinParent) . ' = ' . $db->q($id));
+
+		$valFilter = $this->addFilterToQuery($filterElement, $query);
+		if(empty($id)) {
+			$query->where($db->qn($joinParent) . ' IS NULL');
+		} else {
+			$query->where($db->qn($joinParent) . ' = ' . $db->q($id));
+		}
+
 		$db->setQuery($query);
 		$children = $db->loadRowList();
 
@@ -544,11 +555,10 @@ class PlgFabrik_ElementOrdering extends PlgFabrik_ElementList
 		}
 
 		$elements = $listModel->getElements('id');
-		$fields = $listModel->fields;
-		$elTree = $elements[$fields->tree];
-		$elOrder = $this->getElement();
-		$columnName = $elOrder->getElement()->name;
+		$elTree = $elements[$this->fields->tree];
+		$elOrder = $elements[$this->fields->ordering];
 
+		$columnName = $elOrder->getElement()->name;
 		$this->setParams($elOrder->getParams(), 0);
 
 		try {
@@ -564,7 +574,7 @@ class PlgFabrik_ElementOrdering extends PlgFabrik_ElementList
 	/**
 	 * This method make the ordering to form view and to list view when tree is draggable
 	 * 
-	 * @param		String			$refParentId			Parent id 
+	 * @param		String			$refParentId		Parent id 
 	 * @param		Ints			$refId				Node id
 	 * @param		String			$columnName			Name of the column used by this plugin
 	 * @param		Object			$listModel			List model
@@ -707,6 +717,10 @@ class PlgFabrik_ElementOrdering extends PlgFabrik_ElementList
 				$tree = true;
 				!isset($fields->tree) ? $fields->tree = $el->getId() : null;
 			}
+
+			if(is_a($el, 'PlgFabrik_ElementOrdering')) {
+				!isset($fields->ordering) ? $fields->ordering = $el->getId() : null;
+			}
 		}
 
 		$this->fields = $fields;
@@ -756,5 +770,38 @@ class PlgFabrik_ElementOrdering extends PlgFabrik_ElementList
 		}
 
 		return $data;
+	}
+
+	/**
+	 * This method from a giving element get the respective data related with this row and add into the query
+	 * 
+	 * @param 		array 		$element		Element to search
+	 * @param 		object		$query			Query to update
+	 * 
+	 * @return		void
+	 */
+	private function addFilterToQuery($element, &$query)
+	{
+        $listModel = Factory::getApplication()->bootComponent('com_fabrik')->getMVCFactory()->createModel('List', 'FabrikFEModel');
+		$db = Factory::getContainer()->get('DatabaseDriver');
+        $app = Factory::getApplication();
+
+		if(!isset($element)) {
+			return;
+		}
+
+		$input = $app->input;
+		$listId = $input->getInt('listId');
+		$rowId = $input->getInt('rowid');
+		$nameFilter = $element->getElement()->name;
+
+        $listModel->setId($listId);
+		$row = (array) $listModel->getRow($rowId);
+		$fullName = $element->getFullName() . '_raw';
+		$valFilter = ArrayHelper::getValue($row, $fullName) ?? $input->getInt($fullName);
+
+		if($valFilter) {
+			$query->where($db->qn($nameFilter) . ' = ' . $valFilter);
+		}
 	}
 }

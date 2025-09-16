@@ -58,7 +58,8 @@ define(['jquery', 'fab/element', 'fab/encoder', 'fab/fabrik'], function (jQuery,
                     value: value,
                     listId: self.options.listId,
                     refTreeId: self.options.refTreeId,
-                    htmlName: self.options.element
+                    htmlName: self.options.element,
+                    filterElementId: self.options.filterElementId
                 }
             }).done(function(r) {
                 var result = JSON.parse(r);

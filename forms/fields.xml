@@ -8,12 +8,17 @@
 			<field name="ref_tree"
 				type="listfields"
 				description="PLG_ELEMENT_ORDERING_REF_TREE_DESC"
-				label="PLG_ELEMENT_ORDERING_REF_TREE_LABEL"/>
+				label="PLG_ELEMENT_ORDERING_REF_TREE_LABEL"
+			/>
 
 		</fieldset>
 
 		<fieldset label="COM_FABRIK_ADVANCED" name="plg-element-ordering-advanced">
-
+			<field name="filter_element"
+				type="listfields"
+				description="PLG_ELEMENT_ORDERING_FILTER_ELEMENT_DESC"
+				label="PLG_ELEMENT_ORDERING_FILTER_ELEMENT_LABEL"
+			/>
 		</fieldset>
 
 	</fields>
