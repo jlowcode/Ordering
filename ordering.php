@@ -100,6 +100,36 @@ class PlgFabrik_ElementOrdering extends PlgFabrik_ElementList
 	}
 
 	/**
+	 * This method set position column to children nodes
+	 * 
+	 * @param		String			$table				Table to update
+	 * @param		String			$column				Columns to set
+	 * @param		String			$joinKey			Primary key
+	 * @param		Int				$pos				Position to update
+	 * @param		Array			$val				Row data
+	 * 
+	 * @return		Null
+	 */
+	private function setPositionToChildren($table, $column, $joinKey, &$pos, $val)
+	{
+		$db = Factory::getContainer()->get('DatabaseDriver');
+
+		if(!empty($val)) {
+			foreach ($val as $v) {
+				$query = $db->getQuery(true);
+				$query->update($db->qn($table));
+				$query->set($db->qn($column.'_pos') . ' = ' . $pos++);
+				$query->where($db->qn($joinKey) . ' = ' . $v['id']);
+				$db->setQuery($query);
+				$db->execute();
+
+				$this->setPositionToChildren($table, $column, $joinKey, $pos, $v['children']);
+			}
+
+		}		
+	}
+
+	/**
 	 * Draws the html form element
 	 *
 	 * @param       Array           $data                   To pre-populate element with
@@ -217,90 +247,6 @@ class PlgFabrik_ElementOrdering extends PlgFabrik_ElementList
 		Text::sprintf('PLG_FABRIK_ELEMENT_ORDERING_FIRST_STEP', $nameRefTree, Array('script'=>true));
     }
 
-    /**
-     * This method called by ajax process the parent node and send the children to rebuild the tree
-     * 
-     * @return      Json
-     */
-    public function onGetTree() 
-    {
-        $listModel = Factory::getApplication()->bootComponent('com_fabrik')->getMVCFactory()->createModel('List', 'FabrikFEModel');
-        $app = Factory::getApplication();
-
-		$input = $app->input;
-		$r = new stdClass;
-
-        $node = $input->getString('value');
-        $listId = $input->getInt('listId');
-        $refTreeId = $input->getInt('refTreeId');
-		$filterElementId = $input->getInt('filterElementId');
-        $htmlName = explode('___', $input->getString('htmlName'))[1];
-
-		$listModel->setId($listId);
-		$table = $listModel->getFormModel()->getTableName();
-
-		try {
-			$r->data = $this->getChildrenNodes($node, $listId, $refTreeId, $htmlName, $filterElementId);
-			$r->htmlName = $table . '___' . $htmlName;
-			$r->success = true;
-		} catch (\Throwable $th) {
-			$r->msg = $th->getMessage();
-			$r->success = false;
-		}
-
-		echo json_encode($r);
-    }
-
-	/**
-	 * This method get from database the children nodes
-	 * 
-	 * @param		String			$id						Parent node to search
-	 * @param		Int				$listId					List id to get params
-	 * @param		Int				$refTreeId				Element id to reference tree
-	 * @param		String			$order					Column to order results
-	 * @param		INT				$filterElementId		Element id to use as a filter
-	 * 
-	 * @return		Array
-	 */
-	private function getChildrenNodes($id, $listId, $refTreeId, $order, $filterElementId)
-	{
-        $listModel = Factory::getApplication()->bootComponent('com_fabrik')->getMVCFactory()->createModel('List', 'FabrikFEModel');
-		$db = Factory::getContainer()->get('DatabaseDriver');
-
-		$first = Array(-1, Text::_("PLG_FABRIK_ELEMENT_ORDERING_FIRST"));
-		$params = $this->getParams();
-
-		$listModel->setId($listId);
-		$table = $listModel->getFormModel()->getTableName();
-		$elements = $listModel->getElements('id');
-		$refTree = $elements[$refTreeId];
-		$filterElement = $elements[$filterElementId];
-		$paramsTree = $refTree->getParams();
-
-		$joinKey = $paramsTree->get('join_key_column');
-		$joinVal = $paramsTree->get('join_val_column');
-		$joinParent = $paramsTree->get('tree_parent_id');
-
-		$query = $db->getQuery(true);
-		$query->select($db->qn([$joinKey, $joinVal]))
-			->from($db->qn($table))
-			->order($db->qn($order));
-
-		$valFilter = $this->addFilterToQuery($filterElement, $query);
-		if(empty($id)) {
-			$query->where($db->qn($joinParent) . ' IS NULL');
-		} else {
-			$query->where($db->qn($joinParent) . ' = ' . $db->q($id));
-		}
-
-		$db->setQuery($query);
-		$children = $db->loadRowList();
-
-		if(!empty($children)) array_unshift($children, $first);
-
-		return $children;
-	}
-
 	/**
      * Is the element consider to be empty for purposes of rendering on the form,
      * i.e. for assigning classes, etc.  Can be overridden by individual elements.
@@ -380,63 +326,48 @@ class PlgFabrik_ElementOrdering extends PlgFabrik_ElementList
 	}
 
 	/**
-	 * This method set position column to children nodes
-	 * 
-	 * @param		String			$table				Table to update
-	 * @param		String			$column				Columns to set
-	 * @param		String			$joinKey			Primary key
-	 * @param		Int				$pos				Position to update
-	 * @param		Array			$val				Row data
-	 * 
-	 * @return		Null
+	 * Get database field description
+	 *
+	 * @return  	String
 	 */
-	private function setPositionToChildren($table, $column, $joinKey, &$pos, $val)
+	public function getFieldDescription()
 	{
-		$db = Factory::getContainer()->get('DatabaseDriver');
-
-		if(!empty($val)) {
-			foreach ($val as $v) {
-				$query = $db->getQuery(true);
-				$query->update($db->qn($table));
-				$query->set($db->qn($column.'_pos') . ' = ' . $pos++);
-				$query->where($db->qn($joinKey) . ' = ' . $v['id']);
-				$db->setQuery($query);
-				$db->execute();
-
-				$this->setPositionToChildren($table, $column, $joinKey, $pos, $v['children']);
-			}
-
-		}		
+		return 'INT';
 	}
 
-	/**
-	 * This method verify if the column exists and if not create it in database
-	 * 
-	 * @param		Object		$row			That is going to be updated
-	 * @param		String		$table			Actual table
-	 * @param		String		$sufix			Column sufix to check
-	 * 
-	 * @return		Bool
-	 */
-	private function saveNewColumn($row, $table, $sufix)
-	{
-		$db = Factory::getContainer()->get('DatabaseDriver');
+    /**
+     * This method called by ajax process the parent node and send the children to rebuild the tree
+     * 
+     * @return      Json
+     */
+    public function onGetTree() 
+    {
+        $listModel = Factory::getApplication()->bootComponent('com_fabrik')->getMVCFactory()->createModel('List', 'FabrikFEModel');
+        $app = Factory::getApplication();
 
-		$query = $db->getQuery(true);
-		$query->select($db->qn('COLUMN_NAME'))
-			->from($db->qn('INFORMATION_SCHEMA') . '.' . $db->qn('COLUMNS'))
-			->where($db->qn('TABLE_NAME') . ' = ' . $db->q($table))
-			->where($db->qn('COLUMN_NAME') . ' = ' . $db->q($row->name.$sufix))
-			->where($db->qn('TABLE_SCHEMA') . ' = (SELECT DATABASE())');
-		$db->setQuery($query);
-		$column = $db->loadResult();
+		$input = $app->input;
+		$r = new stdClass;
 
-		if($column) return;
+        $node = $input->getString('value');
+        $listId = $input->getInt('listId');
+        $refTreeId = $input->getInt('refTreeId');
+		$filterElementId = $input->getInt('filterElementId');
+        $htmlName = explode('___', $input->getString('htmlName'))[1];
 
-		$sql = "ALTER TABLE {$db->qn($table)} ADD COLUMN {$db->qn($row->name.$sufix)} INT AFTER {$db->qn($row->name)}";
-		$db->setQuery($sql);
-		return $db->execute();
-	}
+		$listModel->setId($listId);
+		$table = $listModel->getFormModel()->getTableName();
+
+		try {
+			$r->data = $this->getChildrenNodes($node, $listId, $refTreeId, $htmlName, $filterElementId);
+			$r->htmlName = $table . '___' . $htmlName;
+			$r->success = true;
+		} catch (\Throwable $th) {
+			$r->msg = $th->getMessage();
+			$r->success = false;
+		}
+
+		echo json_encode($r);
+    }
 
 	/**
 	 * Called when the element is saved
@@ -451,16 +382,6 @@ class PlgFabrik_ElementOrdering extends PlgFabrik_ElementList
 	}
 
 	/**
-	 * Get database field description
-	 *
-	 * @return  	String
-	 */
-	public function getFieldDescription()
-	{
-		return 'INT';
-	}
-
-	/**
 	 * Run right before the form processing
 	 * keeps the data to be processed or sent if consent is not given
 	 *
@@ -469,8 +390,6 @@ class PlgFabrik_ElementOrdering extends PlgFabrik_ElementList
 	public function onBeforeProcess()
 	{
 		$db = Factory::getContainer()->get('DatabaseDriver');
-
-		if($input->getBool('metadata_extract')) return true;
 
 		$listModel = $this->getListModel();
 		$formModel = $this->getFormModel();
@@ -569,6 +488,152 @@ class PlgFabrik_ElementOrdering extends PlgFabrik_ElementList
 		}
 
 		echo json_encode($r);
+	}
+
+	/**
+	 * Trigger called when a row is deleted, if a join (multiselect/checbox) then remove
+	 * rows from _repeat_foo table.
+	 * 
+	 * @param   	Array 		$groups 		Grouped data of rows to delete
+	 * 
+	 * @return  	Bool
+	 */
+	public function onDeleteRows($groups)
+	{
+		$this->setNestedConfig();
+
+		foreach($groups as $group) {
+			foreach ($group as $row) {
+				$id = $row->__pk_val;
+				$this->nested->deletePullUpChildren($id);
+				$this->nested->rebuild();
+			}
+		}
+
+		return true;
+	}
+
+	/**
+	 * This method get from database the children nodes
+	 * 
+	 * @param		String			$id						Parent node to search
+	 * @param		Int				$listId					List id to get params
+	 * @param		Int				$refTreeId				Element id to reference tree
+	 * @param		String			$order					Column to order results
+	 * @param		INT				$filterElementId		Element id to use as a filter
+	 * 
+	 * @return		Array
+	 */
+	private function getChildrenNodes($id, $listId, $refTreeId, $order, $filterElementId)
+	{
+        $listModel = Factory::getApplication()->bootComponent('com_fabrik')->getMVCFactory()->createModel('List', 'FabrikFEModel');
+		$db = Factory::getContainer()->get('DatabaseDriver');
+
+		$first = Array(-1, Text::_("PLG_FABRIK_ELEMENT_ORDERING_FIRST"));
+		$params = $this->getParams();
+
+		$listModel->setId($listId);
+		$table = $listModel->getFormModel()->getTableName();
+		$elements = $listModel->getElements('id');
+		$refTree = $elements[$refTreeId];
+		$filterElement = $elements[$filterElementId];
+		$paramsTree = $refTree->getParams();
+
+		$joinKey = $paramsTree->get('join_key_column');
+		$joinVal = $paramsTree->get('join_val_column');
+		$joinParent = $paramsTree->get('tree_parent_id');
+
+		$query = $db->getQuery(true);
+		$query->select($db->qn([$joinKey, $joinVal]))
+			->from($db->qn($table))
+			->order($db->qn($order));
+
+		$valFilter = $this->addFilterToQuery($filterElement, $query);
+		if(empty($id)) {
+			$query->where($db->qn($joinParent) . ' IS NULL');
+		} else {
+			$query->where($db->qn($joinParent) . ' = ' . $db->q($id));
+		}
+
+		$db->setQuery($query);
+		$children = $db->loadRowList();
+
+		if(!empty($children)) array_unshift($children, $first);
+
+		return $children;
+	}
+
+	/**
+	 * Data list to template tutorial
+	 * 
+	 * @return		array
+	 */
+	private function getData()
+	{
+		$db = Factory::getContainer()->get('DatabaseDriver');
+		$listModel = $this->getListModel();
+
+		$els = $listModel->getElements('id');
+		$tableName = $listModel->getTable()->db_table_name;
+
+		$ids = [];
+		$elJoin = $els[$this->fields->tree];
+		$nameJoin = $elJoin->getElement()->get('name');
+
+		$query = $db->getQuery(true);
+		$query->select([$db->qn('c1.id', 'id'), $db->qn('c2.id', 'child_id'), $db->qn('c1.'.$nameJoin, 'parent_id')])
+			->from($db->qn($tableName, 'c1'))
+			->join('LEFT', $db->qn($tableName, 'c2') . ' ON c2.'.$nameJoin.'= c1.id')
+			->order($db->qn('c1.' . $this->getElement()->name));
+		$db->setQuery($query);
+		$result = $db->loadObjectList();
+
+		$itensOrder = Array();
+		foreach ($result as $item) {
+			$item = (Array) $item;
+			$item['children'] = Array();
+			$itensOrder[$item['id']] = $item;
+		}
+
+		$data = Array();
+		foreach ($itensOrder as &$item) {
+			if ($item['parent_id']) {
+				$itensOrder[$item['parent_id']]['children'][] = &$item;
+			} else {
+				$data[] = &$item;
+			}
+		}
+
+		return $data;
+	}
+
+	/**
+	 * This method verify if the column exists and if not create it in database
+	 * 
+	 * @param		Object		$row			That is going to be updated
+	 * @param		String		$table			Actual table
+	 * @param		String		$sufix			Column sufix to check
+	 * 
+	 * @return		Bool
+	 */
+	private function saveNewColumn($row, $table, $sufix)
+	{
+		$db = Factory::getContainer()->get('DatabaseDriver');
+
+		$query = $db->getQuery(true);
+		$query->select($db->qn('COLUMN_NAME'))
+			->from($db->qn('INFORMATION_SCHEMA') . '.' . $db->qn('COLUMNS'))
+			->where($db->qn('TABLE_NAME') . ' = ' . $db->q($table))
+			->where($db->qn('COLUMN_NAME') . ' = ' . $db->q($row->name.$sufix))
+			->where($db->qn('TABLE_SCHEMA') . ' = (SELECT DATABASE())');
+		$db->setQuery($query);
+		$column = $db->loadResult();
+
+		if($column) return;
+
+		$sql = "ALTER TABLE {$db->qn($table)} ADD COLUMN {$db->qn($row->name.$sufix)} INT AFTER {$db->qn($row->name)}";
+		$db->setQuery($sql);
+		return $db->execute();
 	}
 
 	/**
@@ -673,29 +738,6 @@ class PlgFabrik_ElementOrdering extends PlgFabrik_ElementList
 	}
 
 	/**
-	 * Trigger called when a row is deleted, if a join (multiselect/checbox) then remove
-	 * rows from _repeat_foo table.
-	 * 
-	 * @param   	Array 		$groups 		Grouped data of rows to delete
-	 * 
-	 * @return  	Bool
-	 */
-	public function onDeleteRows($groups)
-	{
-		$this->setNestedConfig();
-
-		foreach($groups as $group) {
-			foreach ($group as $row) {
-				$id = $row->__pk_val;
-				$this->nested->deletePullUpChildren($id);
-				$this->nested->rebuild();
-			}
-		}
-
-		return true;
-	}
-
-	/**
 	 * This method check if this list has the properties required to use the element
 	 * 
 	 * @param 		FabrikFEModelList		$listModel		List model to get the elements
@@ -726,50 +768,6 @@ class PlgFabrik_ElementOrdering extends PlgFabrik_ElementList
 		$this->fields = $fields;
 
 		return $tree;
-	}
-
-	/**
-	 * Data list to template tutorial
-	 * 
-	 * @return		array
-	 */
-	private function getData()
-	{
-		$db = Factory::getContainer()->get('DatabaseDriver');
-		$listModel = $this->getListModel();
-
-		$els = $listModel->getElements('id');
-		$tableName = $listModel->getTable()->db_table_name;
-
-		$ids = [];
-		$elJoin = $els[$this->fields->tree];
-		$nameJoin = $elJoin->getElement()->get('name');
-
-		$query = $db->getQuery(true);
-		$query->select([$db->qn('c1.id', 'id'), $db->qn('c2.id', 'child_id'), $db->qn('c1.'.$nameJoin, 'parent_id')])
-			->from($db->qn($tableName, 'c1'))
-			->join('LEFT', $db->qn($tableName, 'c2') . ' ON c2.'.$nameJoin.'= c1.id')
-			->order($db->qn('c1.' . $this->getElement()->name));
-		$db->setQuery($query);
-		$result = $db->loadObjectList();
-
-		$itensOrder = Array();
-		foreach ($result as $item) {
-			$item = (Array) $item;
-			$item['children'] = Array();
-			$itensOrder[$item['id']] = $item;
-		}
-
-		$data = Array();
-		foreach ($itensOrder as &$item) {
-			if ($item['parent_id']) {
-				$itensOrder[$item['parent_id']]['children'][] = &$item;
-			} else {
-				$data[] = &$item;
-			}
-		}
-
-		return $data;
 	}
 
 	/**
