@@ -35,9 +35,13 @@ define(['jquery', 'fab/element', 'fab/encoder', 'fab/fabrik'], function (jQuery,
             self.configureRefTree(self.options.refTree);
             self.buildTree(self.options.defaultTree ? self.options.defaultTree : '');
 
+            if(self.options.selectedValue !== null) {
+                self.addTag(self.options.selectedValue.name, self.options.selectedValue.id);
+            }
+
             tree.off('tree.click').on('tree.click', function(event) {
                 var node = event.node;
-                self.addTag(node.name, node.id, true);
+                self.addTag(node.name, node.id);
             })
         },
 
@@ -99,7 +103,6 @@ define(['jquery', 'fab/element', 'fab/encoder', 'fab/fabrik'], function (jQuery,
         // Add a listener in ref tree element to rebuild the order always the parent node change
         configureRefTree: function (refTree) {
             var self = this;
-            var tree = jQuery('#'+refTree).find('.jqtree_common');
             var ref = jQuery('#'+refTree);
 
             ref.on('click', function() {

@@ -222,6 +222,7 @@ class PlgFabrik_ElementOrdering extends PlgFabrik_ElementList
 		$opts->refTreeId = $params->get('ref_tree');
 		$opts->filterElementId = $params->get('filter_element');
 		$opts->defaultTree = $this->defaultTree;
+		$opts->selectedValue = $this->getSelectedValue();
 		$opts->elName = $this->getHTMLid().'[]';
  
         HTMLHelper::script('plugins/fabrik_element/ordering/dist/js/tree.jquery.js');
@@ -605,6 +606,43 @@ class PlgFabrik_ElementOrdering extends PlgFabrik_ElementList
 		}
 
 		return $data;
+	}
+
+	/**
+	 * This method get the actual value in edit view
+	 * 
+	 * @return		array
+	 */
+	private function getSelectedValue()
+	{
+		$app = Factory::getApplication();
+		$input = $app->input;
+
+        $params = $this->getParams();
+		$listModel = $this->getListModel();
+		$formModel = $this->getFormModel();
+
+		$elements = $listModel->getElements('id');
+		$refTreeId = $params->get('ref_tree');
+
+		$refTree = $elements[$refTreeId];
+		$paramsTree = $refTree->getParams();
+		$joinVal = $paramsTree->get('join_val_column');
+
+		$rowId = (int) $formModel->getRowId();
+		$data = $formModel->getData();
+		$data = $listModel->removeTableNameFromSaveData($data);
+		$name = ArrayHelper::getValue($data, $joinVal);
+
+		if(!$rowId) {
+			return;
+		}
+
+		$selected = array();
+		$selected['id'] = $rowId;
+		$selected['name'] = $name;
+
+		return $selected;
 	}
 
 	/**
