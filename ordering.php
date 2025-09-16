@@ -223,7 +223,8 @@ class PlgFabrik_ElementOrdering extends PlgFabrik_ElementList
      */
     public function onGetTree() 
     {
-		$listModel = JModelLegacy::getInstance('List', 'FabrikFEModel');
+        $listModel = Factory::getApplication()->bootComponent('com_fabrik')->getMVCFactory()->createModel('List', 'FabrikFEModel');
+
         $app = Factory::getApplication();
 
 		$input = $app->input;
@@ -261,7 +262,8 @@ class PlgFabrik_ElementOrdering extends PlgFabrik_ElementList
 	 */
 	private function getChildrenNodes($id, $listId, $refTreeId, $order)
 	{
-		$listModel = JModelLegacy::getInstance('List', 'FabrikFEModel');
+        $listModel = Factory::getApplication()->bootComponent('com_fabrik')->getMVCFactory()->createModel('List', 'FabrikFEModel');
+
 		$db = Factory::getContainer()->get('DatabaseDriver');
 		$first = Array(-1, Text::_("PLG_FABRIK_ELEMENT_ORDERING_FIRST"));
 
@@ -310,7 +312,7 @@ class PlgFabrik_ElementOrdering extends PlgFabrik_ElementList
 	 *
 	 * @return 		Null
 	 */
-	public function beforeSave(&$row) 
+	public function beforeSave(&$row)
 	{
 		$db = Factory::getContainer()->get('DatabaseDriver');
 
@@ -331,8 +333,9 @@ class PlgFabrik_ElementOrdering extends PlgFabrik_ElementList
 		$paramsTree = $refTree->getParams();
 		$joinKey = $paramsTree->get('join_key_column');
 
-		if(!$listModel->canShowTutorialTemplate()) {
+		if(!$this->checkProperties($listModel)) {
 			$this->app->enqueueMessage(Text::_('PLG_FABRIK_ELEMENT_ORDERING_ERROR_SAVE'), 'notice');
+			return;
 		}
 
 		$this->saveNewColumn($row, $table, '_lvl');
@@ -348,7 +351,7 @@ class PlgFabrik_ElementOrdering extends PlgFabrik_ElementList
 			$this->setNestedConfig();
 			$this->nested->rebuild();
 
-			$data = $listModel->dataTemplateTutorial();
+			$data = $this->getData();
 			$x = 1;
 			foreach ($data as $val) {
 				$query = $db->getQuery(true);
@@ -522,7 +525,7 @@ class PlgFabrik_ElementOrdering extends PlgFabrik_ElementList
 	 */
 	public function onMakeOrdering()
 	{
-		$listModel = JModelLegacy::getInstance('List', 'FabrikFEModel');
+        $listModel = Factory::getApplication()->bootComponent('com_fabrik')->getMVCFactory()->createModel('List', 'FabrikFEModel');
         $app = Factory::getApplication();
 
 		$input = $app->input;
@@ -535,14 +538,15 @@ class PlgFabrik_ElementOrdering extends PlgFabrik_ElementList
 
 		$listModel->setId($listId);
 
-		if(!$listModel->canShowTutorialTemplate()) {
+		if(!$this->checkProperties($listModel)) {
 			$this->app->enqueueMessage(Text::_('PLG_FABRIK_ELEMENT_ORDERING_ERROR_SAVE'), 'notice');
+			return;
 		}
 
 		$elements = $listModel->getElements('id');
-		$fields = $listModel->fieldsTemplateTutorial;
+		$fields = $listModel->fields;
 		$elTree = $elements[$fields->tree];
-		$elOrder = $elements[$fields->ordering];
+		$elOrder = $this->getElement();
 		$columnName = $elOrder->getElement()->name;
 
 		$this->setParams($elOrder->getParams(), 0);
@@ -679,5 +683,78 @@ class PlgFabrik_ElementOrdering extends PlgFabrik_ElementList
 		}
 
 		return true;
+	}
+
+	/**
+	 * This method check if this list has the properties required to use the element
+	 * 
+	 * @param 		FabrikFEModelList		$listModel		List model to get the elements
+	 * 
+	 * @return  	bool
+	 */
+	public function checkProperties($listModel)
+	{
+		$els = $listModel->getElements('id');
+		$fields = new stdClass();
+
+		foreach ($els as $el) {
+			$params = $el->getParams();
+			if (
+				is_a($el, 'PlgFabrik_ElementDatabasejoin') && $params->get('database_join_display_type') == 'auto-complete'
+				&& $params->get('join_db_name') == $listModel->getTable()->get('db_table_name') &&
+				($params->get('database_join_display_style') == 'both-treeview-autocomplete' || $params->get('database_join_display_style') == 'only-treeview')
+			) {
+				$tree = true;
+				!isset($fields->tree) ? $fields->tree = $el->getId() : null;
+			}
+		}
+
+		$this->fields = $fields;
+
+		return $tree;
+	}
+
+	/**
+	 * Data list to template tutorial
+	 * 
+	 * @return		array
+	 */
+	private function getData()
+	{
+		$db = Factory::getContainer()->get('DatabaseDriver');
+		$listModel = $this->getListModel();
+
+		$els = $listModel->getElements('id');
+		$tableName = $listModel->getTable()->db_table_name;
+
+		$ids = [];
+		$elJoin = $els[$this->fields->tree];
+		$nameJoin = $elJoin->getElement()->get('name');
+
+		$query = $db->getQuery(true);
+		$query->select([$db->qn('c1.id', 'id'), $db->qn('c2.id', 'child_id'), $db->qn('c1.'.$nameJoin, 'parent_id')])
+			->from($db->qn($tableName, 'c1'))
+			->join('LEFT', $db->qn($tableName, 'c2') . ' ON c2.'.$nameJoin.'= c1.id')
+			->order($db->qn('c1.' . $this->getElement()->name));
+		$db->setQuery($query);
+		$result = $db->loadObjectList();
+
+		$itensOrder = Array();
+		foreach ($result as $item) {
+			$item = (Array) $item;
+			$item['children'] = Array();
+			$itensOrder[$item['id']] = $item;
+		}
+
+		$data = Array();
+		foreach ($itensOrder as &$item) {
+			if ($item['parent_id']) {
+				$itensOrder[$item['parent_id']]['children'][] = &$item;
+			} else {
+				$data[] = &$item;
+			}
+		}
+
+		return $data;
 	}
 }
